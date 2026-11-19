@@ -1,0 +1,66 @@
+# Whale Morning Briefing — Ringkasan Pagi Telegram (HARIAN, jam 07:00 WIB)
+# Pasang file ini di: .github/workflows/whale-morning-briefing.yml
+# Script pendamping (wajib, satu repo, di ROOT repo sejajar main.py):
+#   whale_morning_briefing.py
+# Secrets yang dibutuhkan (sama seperti workflow alert, tidak perlu buat baru):
+#   Settings > Secrets and variables > Actions > Secrets:
+#   TELEGRAM_BOT_TOKEN  dan  TELEGRAM_CHAT_ID
+# Variables opsional (Settings > Secrets and variables > Actions > Variables):
+#   MIN_SIZE_USD        default 250000  (posisi umum >= nilai ini masuk ringkasan)
+#   PUMP_MIN_SIZE_USD   default 100000  (ambang khusus PUMP/USDT)
+#   LIQ_DANGER_PCT      default 12      (jarak likuidasi <= nilai ini ditandai)
+#   BRIEFING_TOP_N      default 10      (jumlah posisi terbesar yang ditampilkan)
+#
+# Jadwal: cron "0 0 * * *" = 00:00 UTC = 07:00 WIB, setiap hari.
+# GitHub menjadwalkan dalam UTC dan run terjadwal bisa telat beberapa menit
+# saat server ramai — itu normal, bukan error.
+#
+# Beda dengan whale-futures-telegram.yml (alert tiap 5 menit):
+# - Workflow ini HANYA kirim 1x sehari: snapshot posisi whale besar pagi ini.
+# - Isi: total posisi terpantau, posisi terbesar, bagian khusus
+#   Gold (PAXG) dan PUMP/USDT, dan posisi yang dekat likuidasi (<= 12%).
+# - TP/SL TIDAK dikarang: kalau whale tidak pasang, tertulis "Belum pasang TP/SL".
+# - Tidak memakai state/cache — selalu ambil data live Hyperliquid saat jalan.
+name: Whale Morning Briefing Telegram
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Kirim pesan tes ke Telegram sebelum ringkasan"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: whale-morning-briefing
+  cancel-in-progress: false
+
+jobs:
+  briefing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ambil posisi whale & kirim ringkasan pagi ke Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MIN_SIZE_USD: ${{ vars.MIN_SIZE_USD || '250000' }}
+          PUMP_MIN_SIZE_USD: ${{ vars.PUMP_MIN_SIZE_USD || '100000' }}
+          LIQ_DANGER_PCT: ${{ vars.LIQ_DANGER_PCT || '12' }}
+          BRIEFING_TOP_N: ${{ vars.BRIEFING_TOP_N || '10' }}
+          TEST_MODE: ${{ inputs.test }}
+        run: python whale_morning_briefing.py
