@@ -1,0 +1,58 @@
+# Whale Signal Telegram — ringkasan sinyal TIAP JAM + alert sinyal KUAT baru.
+# Pasang file ini di: .github/workflows/whale-signal-telegram.yml
+# Script pendamping (wajib, satu repo): whale_signal_telegram.py (repo root)
+# Secrets yang dibutuhkan (Settings > Secrets and variables > Actions):
+#   TELEGRAM_BOT_TOKEN  dan  TELEGRAM_CHAT_ID  (sama seperti workflow notif whale)
+# Variable opsional: SIGNAL_TOP_N (default 5) — jumlah sinyal di ringkasan jam.
+# Jadwal: cron tiap 15 menit supaya alert sinyal KUAT cepat sampai;
+# ringkasan jamannya diatur di dalam script (sekali per jam WIB).
+# Catatan cache: key memakai run_id + restore-keys prefix supaya state
+# benar-benar ter-update tiap run (key tetap yang sama tidak bisa ditimpa
+# oleh actions/cache — run berikutnya akan memakai state lama selamanya).
+name: Whale Signal Telegram
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Kirim pesan tes ke Telegram"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: whale-signal-telegram
+  cancel-in-progress: false
+
+jobs:
+  signal:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Pulihkan state sinyal terakhir
+        uses: actions/cache@v4
+        with:
+          path: .whale-signal-state
+          key: signal-telegram-state-${{ github.run_id }}
+          restore-keys: |
+            signal-telegram-state-
+
+      - name: Hitung sinyal whale & kirim ke Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SIGNAL_TOP_N: ${{ vars.SIGNAL_TOP_N || '5' }}
+          TEST_MODE: ${{ inputs.test }}
+        run: python whale_signal_telegram.py
