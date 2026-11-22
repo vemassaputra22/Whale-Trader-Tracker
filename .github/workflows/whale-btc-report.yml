@@ -1,0 +1,28 @@
+name: Whale BTC Report
+
+on:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Kirim pesan tes saja (tanpa mengubah state)"
+        type: boolean
+        default: false
+
+jobs:
+  btc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .whale-btc-state
+          key: btc-report-state
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Kirim laporan BTC ke Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEST_MODE: ${{ inputs.test }}
+        run: python whale_btc_report.py
