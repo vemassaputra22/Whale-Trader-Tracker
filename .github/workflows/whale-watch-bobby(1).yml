@@ -1,0 +1,71 @@
+# Whale Watch BobbyBigSize — pantau SATU wallet whale (BobbyBigSize) dan kirim
+# notifikasinya ke Telegram. Terpisah dari workflow Whale Tracker umum.
+# Pasang file ini di: .github/workflows/whale-watch-bobby.yml
+# Script pendamping (wajib, satu repo): whale_watch_bobby.py (repo root)
+# Secrets yang dibutuhkan (Settings > Secrets and variables > Actions):
+#   TELEGRAM_BOT_TOKEN (bot yang sama seperti workflow notif whale) dan
+#   TELEGRAM_BOBBY_CHAT_ID (Secret BARU — ID chat/grup Telegram terpisah
+#     "Pantau Bobby"; notif Bobby TIDAK masuk ke chat utama).
+#   Bila TELEGRAM_BOBBY_CHAT_ID kosong, script berhenti tanpa mengirim apa pun.
+# Variables opsional:
+#   WATCH_WALLET (default 0x7fdafde5cfb5465924316eced2d3715494c517d1) — alamat
+#     wallet yang dipantau; ganti lewat Variable tanpa edit file.
+#   WATCH_MIN_SIZE_USD (default 25000) — ambang ukuran posisi untuk alert.
+# Jadwal: cron tiap 5 menit + pemicu eksternal repository_dispatch
+# (event "whale-check" dari cron-job.org — job "Whale Futures Alerts" yang
+# sama memicu workflow ini juga, jadi tidak perlu job/token tambahan).
+# Alert: posisi baru, posisi ditutup, perubahan ukuran besar (>=20% dan
+# >= $25.000). Run pertama hanya simpan state.
+# Catatan cache: key memakai run_id + restore-keys prefix supaya state
+# benar-benar ter-update tiap run (key tetap yang sama tidak bisa ditimpa
+# oleh actions/cache — run berikutnya akan memakai state lama selamanya).
+name: Whale Watch BobbyBigSize
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  repository_dispatch:
+    types: [whale-check]
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Kirim pesan tes ke Telegram"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: whale-watch-bobby
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Pulihkan state pantauan terakhir
+        uses: actions/cache@v4
+        with:
+          path: .whale-bobby-state
+          key: bobby-watch-state-${{ github.run_id }}
+          restore-keys: |
+            bobby-watch-state-
+
+      - name: Pantau wallet BobbyBigSize & kirim ke Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          BOBBY_CHAT_ID: ${{ secrets.TELEGRAM_BOBBY_CHAT_ID }}
+          WATCH_WALLET: ${{ vars.WATCH_WALLET || '0x7fdafde5cfb5465924316eced2d3715494c517d1' }}
+          WATCH_MIN_SIZE_USD: ${{ vars.WATCH_MIN_SIZE_USD || '25000' }}
+          TEST_MODE: ${{ inputs.test }}
+        run: python whale_watch_bobby.py
